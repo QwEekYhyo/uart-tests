@@ -15,14 +15,19 @@ int main(void) {
     struct termios options;
     tcgetattr(fd, &options);
     cfsetispeed(&options, B115200);
+    cfsetospeed(&options, B115200);
     options.c_cflag |= (CLOCAL | CREAD);
     options.c_cflag &= ~CSIZE;
     options.c_cflag |= CS8;
     options.c_cflag &= ~PARENB;
     options.c_cflag &= ~CSTOPB;
     options.c_cflag &= ~CRTSCTS;
+    options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
     options.c_iflag &= ~(IXON | IXOFF | IXANY);
+    options.c_oflag &= ~OPOST;
     tcsetattr(fd, TCSANOW, &options);
+
+    fcntl(fd, F_SETFL, FNDELAY);
 
     char buffer[256];
     while (1) {
@@ -31,6 +36,7 @@ int main(void) {
             buffer[bytes_read] = '\0';
             printf("data received: %s\n", buffer);
         }
+        usleep(100000);
     }
 
     // never actually reached but whatever
