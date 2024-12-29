@@ -1,8 +1,10 @@
 #include <fcntl.h>
 #include <stdio.h>
+#include <sys/epoll.h>
 #include <termios.h>
 #include <unistd.h>
 
+#define MAX_EVENTS 10
 static const char* device = "/dev/ttyAMA0";
 
 int main(void) {
@@ -28,19 +30,46 @@ int main(void) {
     options.c_oflag &= ~OPOST; // disable output post-processing, unused for now
     tcsetattr(fd, TCSANOW, &options);
 
-    fcntl(fd, F_SETFL, FNDELAY);
+    int epoll_fd = epoll_create1(0);
+    if (epoll_fd == -1) {
+        perror("Error creating epoll instance");
+        close(fd);
+        return 1;
+    }
+
+    struct epoll_event ev, events[MAX_EVENTS];
+    ev.events = EPOLLIN;
+    ev.data.fd = fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+        perror("Error adding fd to epoll");
+        close(fd);
+        close(epoll_fd);
+        return 1;
+    }
 
     char buffer[256];
     while (1) {
-        int bytes_read = read(fd, buffer, sizeof(buffer) - 1);
-        if (bytes_read > 0) {
-            buffer[bytes_read] = '\0';
-            printf("data received: %s\n", buffer);
+        // this should always be one in our case
+        int nb_file_descriptors = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+        if (nb_file_descriptors == -1) {
+            perror("Error in epoll_wait");
+            break;
         }
-        usleep(100000);
+
+        for (int i = 0; i < nb_file_descriptors; i++) {
+            // if serial port has data ready to be read
+            if (events[i].events & EPOLLIN) {
+                int bytes_read = read(events[i].data.fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';
+                    printf("data received: %s\n", buffer);
+                }
+            }
+        }
     }
 
     // never actually reached but whatever
     close(fd);
+    close(epoll_fd);
     return 0;
 }
