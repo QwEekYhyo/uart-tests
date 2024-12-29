@@ -30,6 +30,8 @@ int main(void) {
     options.c_oflag &= ~OPOST; // disable output post-processing, unused for now
     tcsetattr(fd, TCSANOW, &options);
 
+    tcflush(fd, TCIFLUSH);
+
     int epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
         perror("Error creating epoll instance");
